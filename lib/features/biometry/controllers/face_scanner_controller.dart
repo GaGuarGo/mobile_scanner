@@ -192,6 +192,7 @@ class FaceScannerController extends ChangeNotifier {
           updateUI: _updateUI,
           nextChallenge: () {
             currentChallenge = LivenessChallenge.getCloser;
+            animationController.forward();
           },
         );
         break;

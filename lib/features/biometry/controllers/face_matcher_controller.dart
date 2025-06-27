@@ -147,6 +147,7 @@ class FaceMatcherController extends ChangeNotifier {
           updateUI: _updateUI,
           nextChallenge: () {
             _currentChallenge = LivenessChallenge.getCloser;
+            animationController.forward();
           },
         );
         break;
