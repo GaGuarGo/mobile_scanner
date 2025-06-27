@@ -19,29 +19,37 @@ class _PreviewImageState extends State<PreviewImage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.file(
-            _imageFile,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            filterQuality: FilterQuality.high,
-            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
-                wasSynchronouslyLoaded
-                    ? child
-                    : AnimatedOpacity(
-                        opacity: frame != null ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                        child: child,
-                      ),
-            errorBuilder: (context, error, stackTrace) {
-              return const Center(
-                child: Text(
-                  'Error loading image',
-                  style: TextStyle(color: Colors.red, fontSize: 16),
-                ),
-              );
-            },
+          Hero(
+            tag: 'preview-face-photo',
+            child: InteractiveViewer(
+              minScale: 1.0,
+              maxScale: 4.0,
+              panEnabled: false,
+              child: Image.file(
+                _imageFile,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                filterQuality: FilterQuality.high,
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                    wasSynchronouslyLoaded
+                        ? child
+                        : AnimatedOpacity(
+                            opacity: frame != null ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                            child: child,
+                          ),
+                errorBuilder: (context, error, stackTrace) {
+                  return const Center(
+                    child: Text(
+                      'Error loading image',
+                      style: TextStyle(color: Colors.red, fontSize: 16),
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
           Positioned(
             top: 40,

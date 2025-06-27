@@ -19,8 +19,11 @@ class UserFaceTile extends StatelessWidget {
               color: Colors.black,
             )
           : InkWell(
-              child: CircleAvatar(
-                  backgroundImage: FileImage(File(face.photoPath!))),
+              child: Hero(
+                tag: 'preview-face-photo',
+                child: CircleAvatar(
+                    backgroundImage: FileImage(File(face.photoPath!))),
+              ),
               onTap: () {
                 navigatorKey.currentState?.pushNamed('/preview-image',
                     arguments: File(face.photoPath!));
