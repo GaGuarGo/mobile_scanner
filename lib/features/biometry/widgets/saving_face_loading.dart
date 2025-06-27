@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 class SavingFaceLoading extends StatelessWidget {
-  const SavingFaceLoading({super.key});
+  final String? message;
+  const SavingFaceLoading({super.key, this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +15,7 @@ class SavingFaceLoading extends StatelessWidget {
           spacing: 12,
           children: [
             Text(
-              'Saving face data...'.toUpperCase(),
+              (message ?? 'Saving face data...').toUpperCase(),
               style: Theme.of(context).textTheme.titleLarge,
             ),
             CircularProgressIndicator(

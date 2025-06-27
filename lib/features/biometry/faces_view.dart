@@ -41,7 +41,9 @@ class _FacesViewState extends State<FacesView> {
                   return SizedBox.shrink();
                 }
                 return FloatingActionButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    navigatorKey.currentState?.pushNamed('/biometry-matcher');
+                  },
                   backgroundColor: Colors.black,
                   tooltip: 'Match Face',
                   child: Icon(

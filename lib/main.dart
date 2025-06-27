@@ -1,3 +1,4 @@
+import 'package:cam_scanner_test/features/biometry/biometry_matcher_view.dart';
 import 'package:cam_scanner_test/features/biometry/biometry_view.dart';
 import 'package:cam_scanner_test/features/biometry/faces_view.dart';
 import 'package:cam_scanner_test/features/biometry/widgets/preview_image.dart';
@@ -35,6 +36,7 @@ class MyApp extends StatelessWidget {
         //? Face biometry related routes
         '/faces': (context) => const FacesView(),
         '/biometry': (context) => BiometryView(),
+        '/biometry-matcher': (context) => const BiometryMatcherView(),
         '/preview-image': (context) => const PreviewImage(),
         //? Document scanner related routes
         '/scanner': (context) => ScannerPage(),

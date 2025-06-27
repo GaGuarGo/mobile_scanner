@@ -72,12 +72,12 @@ class FaceRecognitionService {
     return List<double>.from(output[0]);
   }
 
-  bool compareEmbeddings(
+  double compareEmbeddings(
     List<double> emb1,
     List<double> emb2, {
     double threshold = 0.6,
   }) {
-    if (emb1.isEmpty || emb2.isEmpty) return false;
+    if (emb1.isEmpty || emb2.isEmpty) return 0.0;
 
     double dotProduct = 0;
     double normA = 0;
@@ -89,6 +89,6 @@ class FaceRecognitionService {
       normB += pow(emb2[i], 2);
     }
 
-    return dotProduct / (sqrt(normA) * sqrt(normB)) > threshold;
+    return (dotProduct / (sqrt(normA) * sqrt(normB))).clamp(-1.0, 1.0);
   }
 }

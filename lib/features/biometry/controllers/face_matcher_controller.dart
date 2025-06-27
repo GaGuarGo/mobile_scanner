@@ -1,16 +1,12 @@
-// ignore_for_file: unnecessary_getters_setters
-
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:cam_scanner_test/features/biometry/controllers/face_camera_controller.dart';
-import 'package:cam_scanner_test/features/biometry/controllers/faces_controller.dart';
-import 'package:cam_scanner_test/features/biometry/data/models/face_model.dart';
-import 'package:cam_scanner_test/features/biometry/data/services/database_service.dart';
 import 'package:cam_scanner_test/features/biometry/config/enums/biometry_liveness_challange.dart';
 import 'package:cam_scanner_test/features/biometry/config/enums/biometry_validation_state.dart';
 import 'package:cam_scanner_test/features/biometry/config/helpers/camera_livestream_helper.dart';
 import 'package:cam_scanner_test/features/biometry/config/helpers/log_helper.dart';
+import 'package:cam_scanner_test/features/biometry/controllers/face_camera_controller.dart';
+import 'package:cam_scanner_test/features/biometry/controllers/faces_controller.dart';
+import 'package:cam_scanner_test/features/biometry/data/models/face_model.dart';
 import 'package:cam_scanner_test/features/biometry/data/services/face_detection_validation_service.dart';
 import 'package:cam_scanner_test/features/biometry/data/services/face_recognition_service.dart';
 import 'package:cam_scanner_test/navigator_key.dart';
@@ -18,44 +14,45 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
 
-class FaceScannerController extends ChangeNotifier {
-  final FaceCameraController _cameraController;
+class FaceMatcherController extends ChangeNotifier {
   final TickerProvider _tickerProvider;
+  final FaceCameraController _cameraController;
 
+  final FaceDetectionValidationService _faceDetectionValidationService;
   final FaceRecognitionService _faceRecognitionService;
-  final DatabaseService _databaseService = DatabaseService();
-  final FaceDetectionValidationService _faceDetectionValidationService =
-      FaceDetectionValidationService();
 
-  final FacesController _facesController = FacesController();
+  final FacesController _facesController;
 
-  FaceScannerController({
+  FaceMatcherController({
     required FaceCameraController cameraController,
     required TickerProvider tickerProvider,
-    FaceRecognitionService? faceRecognitionService,
+    required FaceDetectionValidationService faceDetectionValidationService,
+    required FaceRecognitionService faceRecognitionService,
+    required FacesController facesController,
   })  : _cameraController = cameraController,
         _tickerProvider = tickerProvider,
-        _faceRecognitionService =
-            faceRecognitionService ?? FaceRecognitionService() {
+        _faceDetectionValidationService = faceDetectionValidationService,
+        _faceRecognitionService = faceRecognitionService,
+        _facesController = facesController {
     initialize();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _cameraController.dispose();
+    _faceDetector?.close();
+    animationController.dispose();
   }
 
   FaceDetector? _faceDetector;
   FaceDetector get faceDetector => _faceDetector!;
 
-  Face? _userFace;
-  Face? get userFace => _userFace;
-  set userFace(Face? face) {
-    _userFace = face;
-  }
-
-  bool _loadingFace = false;
-  bool get loadingFace => _loadingFace;
-  set loadingFace(bool value) {
-    _loadingFace = value;
+  bool _isProcessing = false;
+  bool get isProcessing => _isProcessing;
+  set isProcessing(bool value) {
+    _isProcessing = value;
     notifyListeners();
   }
 
@@ -73,20 +70,6 @@ class FaceScannerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  LivenessChallenge _currentChallenge = LivenessChallenge.initial;
-  LivenessChallenge get currentChallenge => _currentChallenge;
-  set currentChallenge(LivenessChallenge challenge) {
-    _currentChallenge = challenge;
-    notifyListeners();
-  }
-
-  bool _isProcessing = false;
-  bool get isProcessing => _isProcessing;
-  set isProcessing(bool value) {
-    _isProcessing = value;
-    notifyListeners();
-  }
-
   bool _savingFace = false;
   bool get savingFace => _savingFace;
   set savingFace(bool value) {
@@ -94,16 +77,10 @@ class FaceScannerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  LivenessChallenge _currentChallenge = LivenessChallenge.initial;
+
   late AnimationController animationController;
   late Animation<double> overlaySizeAnimation;
-
-  @override
-  void dispose() {
-    super.dispose();
-    _faceDetector?.close();
-    animationController.dispose();
-    _faceDetector = null;
-  }
 
   void initialize() {
     animationController = AnimationController(
@@ -131,14 +108,14 @@ class FaceScannerController extends ChangeNotifier {
   }
 
   void _processCameraImage(CameraImage image) async {
-    if (isProcessing) return;
-    isProcessing = true;
+    if (_isProcessing) return;
+    _isProcessing = true;
 
     final inputImage = inputImageFromCameraImage(image,
         controller: _cameraController.cameraController);
     if (inputImage == null) {
       _updateUI(ValidationState.error);
-      isProcessing = false;
+      _isProcessing = false;
       return;
     }
 
@@ -146,15 +123,11 @@ class FaceScannerController extends ChangeNotifier {
 
     if (faces.isEmpty) {
       _updateUI(ValidationState.noFace);
-    }
-    // else if (faces.length > 1) {
-    //   _updateUI(ValidationState.moreFaces);
-    // }
-    else {
+    } else {
       await _performChecks(faces.first);
     }
 
-    isProcessing = false;
+    _isProcessing = false;
   }
 
   Future<void> _performChecks(Face face) async {
@@ -173,25 +146,7 @@ class FaceScannerController extends ChangeNotifier {
           face: face,
           updateUI: _updateUI,
           nextChallenge: () {
-            currentChallenge = LivenessChallenge.turnRight;
-          },
-        );
-        break;
-      case LivenessChallenge.turnRight:
-        _faceDetectionValidationService.validateTurnHeadRight(
-          face: face,
-          updateUI: _updateUI,
-          nextChallenge: () {
-            currentChallenge = LivenessChallenge.turnLeft;
-          },
-        );
-        break;
-      case LivenessChallenge.turnLeft:
-        _faceDetectionValidationService.validateTurnHeadLeft(
-          face: face,
-          updateUI: _updateUI,
-          nextChallenge: () {
-            currentChallenge = LivenessChallenge.getCloser;
+            _currentChallenge = LivenessChallenge.getCloser;
           },
         );
         break;
@@ -201,18 +156,20 @@ class FaceScannerController extends ChangeNotifier {
           cameraController: _cameraController.cameraController,
           updateUI: _updateUI,
           nextChallenge: () {
-            currentChallenge = LivenessChallenge.done;
+            _currentChallenge = LivenessChallenge.done;
           },
         );
         break;
       case LivenessChallenge.done:
         _updateUI(ValidationState.valid);
 
-        await Future.delayed(500.milliseconds);
-        
         await captureFace(face);
 
         break;
+      case LivenessChallenge.turnRight:
+        throw UnimplementedError();
+      case LivenessChallenge.turnLeft:
+        throw UnimplementedError();
     }
   }
 
@@ -227,46 +184,60 @@ class FaceScannerController extends ChangeNotifier {
       final XFile imageFile =
           await _cameraController.cameraController.takePicture();
 
-      final Directory appDocumentsDir =
-          await getApplicationDocumentsDirectory();
-
-      final String fileName =
-          'face_${DateTime.now().millisecondsSinceEpoch}.jpg';
-
-      final String permanentPath = join(appDocumentsDir.path, fileName);
-
-      final File permanentImageFile =
-          await File(imageFile.path).copy(permanentPath);
-
-      final embedding = await _faceRecognitionService.getEmbedding(
-        XFile(permanentImageFile.path),
+      final matcherFace = await _faceRecognitionService.getEmbedding(
+        imageFile,
         face,
       );
 
-      final embeddingJson = jsonEncode(embedding);
+      FaceModel? matchedFace;
+      double? matchProbalityPercentage;
 
-      final faceModel = FaceModel(
-        embedding: embeddingJson,
-        username: "User_${DateTime.now().millisecondsSinceEpoch}",
-        photoPath: permanentPath,
-      );
+      for (final FaceModel face in _facesController.faces) {
+        final attemptFace = (jsonDecode(face.embedding!) as List<dynamic>)
+            .map((f) => double.parse(f.toString()))
+            .toList();
 
-      await _databaseService.insertFace(faceModel);
-      await _facesController.fetchFaces();
+        final matchProbality =
+            _faceRecognitionService.compareEmbeddings(matcherFace, attemptFace);
 
-      ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
-        const SnackBar(
-          content: Text('Face enrolled successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.of(navigatorKey.currentContext!).pop(true);
+        if (matchProbality > (matchProbalityPercentage ?? 0.0)) {
+          matchProbalityPercentage = (matchProbality * 100);
+        }
+
+        if (matchProbality > 0.6) {
+          matchedFace = face;
+
+          break;
+        }
+      }
+
+      if (matchedFace == null) {
+        ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+          SnackBar(
+            content: Text(
+                'No matching face found. Please try again, or add a new face. Probability: ${matchProbalityPercentage?.toStringAsFixed(2)}%'),
+            backgroundColor: Colors.amberAccent,
+          ),
+        );
+
+        Navigator.of(navigatorKey.currentContext!).pop(false);
+      } else {
+        ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+          SnackBar(
+            content: Text('Face Matached with ${matchedFace.username}!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(navigatorKey.currentContext!).pop(true);
+      }
     } catch (e) {
-      LogHelper.error("Error during enrollment: $e");
+      LogHelper.error("Error matching face: $e");
 
       ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
         const SnackBar(
-            content: Text('Error during enrollment. Please try again.')),
+          content: Text('Error matching face. Please try again.'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
       Navigator.of(navigatorKey.currentContext!).pop(false);
     } finally {
@@ -277,7 +248,7 @@ class FaceScannerController extends ChangeNotifier {
   void _updateUI(ValidationState state) {
     if (_currentChallenge == LivenessChallenge.initial &&
         state == ValidationState.notLookingStraight) {
-      currentChallenge = LivenessChallenge.lookStraight;
+      _currentChallenge = LivenessChallenge.lookStraight;
     }
 
     if (state == ValidationState.noFace) {
@@ -288,7 +259,7 @@ class FaceScannerController extends ChangeNotifier {
       case ValidationState.noFace:
         feedbackMessage = "Position your face in the oval";
         borderColor = Colors.white;
-        currentChallenge = LivenessChallenge.initial;
+        _currentChallenge = LivenessChallenge.initial;
         break;
       case ValidationState.notInPosition:
         feedbackMessage = "Center your face in the oval";
