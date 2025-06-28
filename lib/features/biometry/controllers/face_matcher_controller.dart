@@ -199,7 +199,7 @@ class FaceMatcherController extends ChangeNotifier {
             .toList();
 
         final matchProbality =
-            _faceRecognitionService.compareEmbeddings(matcherFace, attemptFace);
+            _faceRecognitionService.calculateCosineSimilarity(matcherFace, attemptFace);
 
         if (matchProbality > (matchProbalityPercentage ?? 0.0)) {
           matchProbalityPercentage = (matchProbality * 100);
