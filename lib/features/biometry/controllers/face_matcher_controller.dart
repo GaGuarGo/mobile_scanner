@@ -146,19 +146,16 @@ class FaceMatcherController extends ChangeNotifier {
           face: face,
           updateUI: _updateUI,
           nextChallenge: () {
-            _currentChallenge = LivenessChallenge.getCloser;
-            animationController.forward();
+            _currentChallenge = LivenessChallenge.steady;
+            // animationController.forward();
           },
         );
         break;
-      case LivenessChallenge.getCloser:
-        _faceDetectionValidationService.validateGetCloser(
+      case LivenessChallenge.steady:
+        _faceDetectionValidationService.validateLookStraight(
           face: face,
-          cameraController: _cameraController.cameraController,
           updateUI: _updateUI,
-          nextChallenge: () {
-            _currentChallenge = LivenessChallenge.done;
-          },
+          nextChallenge: () => _currentChallenge = LivenessChallenge.done,
         );
         break;
       case LivenessChallenge.done:
@@ -177,7 +174,7 @@ class FaceMatcherController extends ChangeNotifier {
   Future<void> captureFace(Face face) async {
     if (savingFace) return;
     savingFace = true;
-    await Future.delayed(500.milliseconds);
+    await Future.delayed(1.seconds);
 
     await _cameraController.cameraController.stopImageStream();
 
@@ -198,8 +195,8 @@ class FaceMatcherController extends ChangeNotifier {
             .map((f) => double.parse(f.toString()))
             .toList();
 
-        final matchProbality =
-            _faceRecognitionService.compareEmbeddings(matcherFace, attemptFace);
+        final matchProbality = _faceRecognitionService
+            .calculateCosineSimilarity(matcherFace, attemptFace);
 
         if (matchProbality > (matchProbalityPercentage ?? 0.0)) {
           matchProbalityPercentage = (matchProbality * 100);
@@ -225,7 +222,8 @@ class FaceMatcherController extends ChangeNotifier {
       } else {
         ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
           SnackBar(
-            content: Text('Face Matached with ${matchedFace.username}! with a probability of ${matchProbalityPercentage?.toStringAsFixed(2)}%'),
+            content: Text(
+                'Face Matached with ${matchedFace.username}! with a probability of ${matchProbalityPercentage?.toStringAsFixed(2)}%'),
             backgroundColor: Colors.green,
           ),
         );

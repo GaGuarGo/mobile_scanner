@@ -40,7 +40,7 @@ class FaceCameraController extends ChangeNotifier {
 
     _cameraController = CameraController(
       frontCamera,
-      ResolutionPreset.high,
+      ResolutionPreset.max,
       enableAudio: false,
       imageFormatGroup: Platform.isAndroid
           ? ImageFormatGroup.nv21

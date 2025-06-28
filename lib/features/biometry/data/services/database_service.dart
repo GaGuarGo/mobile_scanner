@@ -22,8 +22,8 @@ class DatabaseService {
           CREATE TABLE IF NOT EXISTS faces (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT,
+            embedding TEXT,
             photo_path TEXT NOT NULL,
-            embedding TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
         ''');
@@ -78,6 +78,23 @@ class DatabaseService {
       );
     } on Exception catch (e) {
       LogHelper.error('Error deleting face: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> insertFaceEmbedding(String faceId, String embedding) async {
+    try {
+      if (_database == null) {
+        throw Exception('Database not initialized');
+      }
+
+      await _database!.insert(
+        'faces_embeddings',
+        {'face_id': faceId, 'embedding': embedding},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } on Exception catch (e) {
+      LogHelper.error('Error inserting face embedding: $e');
       rethrow;
     }
   }

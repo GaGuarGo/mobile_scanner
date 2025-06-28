@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cam_scanner_test/features/biometry/config/helpers/create_average_embeeding_helper.dart';
 import 'package:cam_scanner_test/features/biometry/controllers/face_camera_controller.dart';
 import 'package:cam_scanner_test/features/biometry/controllers/faces_controller.dart';
 import 'package:cam_scanner_test/features/biometry/data/models/face_model.dart';
@@ -51,6 +52,8 @@ class FaceScannerController extends ChangeNotifier {
   set userFace(Face? face) {
     _userFace = face;
   }
+
+  final List<List<double>> _faceEmbeddings = [];
 
   bool _loadingFace = false;
   bool get loadingFace => _loadingFace;
@@ -146,18 +149,14 @@ class FaceScannerController extends ChangeNotifier {
 
     if (faces.isEmpty) {
       _updateUI(ValidationState.noFace);
-    }
-    // else if (faces.length > 1) {
-    //   _updateUI(ValidationState.moreFaces);
-    // }
-    else {
-      await _performChecks(faces.first);
+    } else {
+      await _performChecks(faces.first, image);
     }
 
     isProcessing = false;
   }
 
-  Future<void> _performChecks(Face face) async {
+  Future<void> _performChecks(Face face, CameraImage image) async {
     if (!_faceDetectionValidationService.isFaceValid(
       face: face,
       cameraController: _cameraController.cameraController,
@@ -166,85 +165,104 @@ class FaceScannerController extends ChangeNotifier {
       return;
     }
 
+    void captureEmbeddingAndProceed(
+      void Function() nextChallengeCallback,
+    ) async {
+      final embedding =
+          await _faceRecognitionService.getEmbeddingFromStream(image, face);
+      if (embedding.isNotEmpty) {
+        _faceEmbeddings.add(embedding);
+        LogHelper.info(
+            'Embedding captured for $currentChallenge. Total: ${_faceEmbeddings.length}');
+      }
+      nextChallengeCallback();
+    }
+
     switch (_currentChallenge) {
       case LivenessChallenge.initial:
       case LivenessChallenge.lookStraight:
         _faceDetectionValidationService.validateLookStraight(
           face: face,
           updateUI: _updateUI,
-          nextChallenge: () {
+          nextChallenge: () => captureEmbeddingAndProceed(() {
             currentChallenge = LivenessChallenge.turnRight;
-          },
+          }),
         );
         break;
       case LivenessChallenge.turnRight:
         _faceDetectionValidationService.validateTurnHeadRight(
           face: face,
           updateUI: _updateUI,
-          nextChallenge: () {
+          nextChallenge: () => captureEmbeddingAndProceed(() {
             currentChallenge = LivenessChallenge.turnLeft;
-          },
+          }),
         );
         break;
       case LivenessChallenge.turnLeft:
         _faceDetectionValidationService.validateTurnHeadLeft(
           face: face,
           updateUI: _updateUI,
-          nextChallenge: () {
-            currentChallenge = LivenessChallenge.getCloser;
-            animationController.forward();
-          },
+          nextChallenge: () => captureEmbeddingAndProceed(() {
+            currentChallenge = LivenessChallenge.steady;
+          }),
         );
         break;
-      case LivenessChallenge.getCloser:
-        _faceDetectionValidationService.validateGetCloser(
+
+      case LivenessChallenge.steady:
+        _faceDetectionValidationService.validateLookStraight(
           face: face,
-          cameraController: _cameraController.cameraController,
           updateUI: _updateUI,
-          nextChallenge: () {
+          nextChallenge: () => captureEmbeddingAndProceed(() {
             currentChallenge = LivenessChallenge.done;
-          },
+          }),
         );
         break;
+
       case LivenessChallenge.done:
         _updateUI(ValidationState.valid);
 
-        await Future.delayed(500.milliseconds);
-        
-        await captureFace(face);
+        await _finalizeEnrollment();
 
         break;
     }
   }
 
-  Future<void> captureFace(Face face) async {
+  Future<void> _finalizeEnrollment() async {
     if (savingFace) return;
     savingFace = true;
-    await Future.delayed(500.milliseconds);
+
+    await Future.delayed(1.seconds);
 
     await _cameraController.cameraController.stopImageStream();
+
+    LogHelper.info(
+        'Finalizing enrollment with ${_faceEmbeddings.length} embeddings.');
+    if (_faceEmbeddings.length < 4) {
+      LogHelper.error(
+          "Enrollment failed: Not enough quality embeddings collected.");
+      ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+        const SnackBar(
+            content: Text('Could not capture all poses. Please try again.')),
+      );
+      Navigator.of(navigatorKey.currentContext!).pop(false);
+      savingFace = false;
+      return;
+    }
+
+    final List<double> masterEmbedding =
+        createAverageEmbedding(_faceEmbeddings);
 
     try {
       final XFile imageFile =
           await _cameraController.cameraController.takePicture();
-
       final Directory appDocumentsDir =
           await getApplicationDocumentsDirectory();
-
       final String fileName =
           'face_${DateTime.now().millisecondsSinceEpoch}.jpg';
-
       final String permanentPath = join(appDocumentsDir.path, fileName);
+      await File(imageFile.path).copy(permanentPath);
 
-      final File permanentImageFile =
-          await File(imageFile.path).copy(permanentPath);
-
-      final embedding = await _faceRecognitionService.getEmbedding(
-        XFile(permanentImageFile.path),
-        face,
-      );
-
-      final embeddingJson = jsonEncode(embedding);
+      final embeddingJson = jsonEncode(masterEmbedding);
 
       final faceModel = FaceModel(
         embedding: embeddingJson,
@@ -253,6 +271,7 @@ class FaceScannerController extends ChangeNotifier {
       );
 
       await _databaseService.insertFace(faceModel);
+
       await _facesController.fetchFaces();
 
       ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
@@ -263,11 +282,9 @@ class FaceScannerController extends ChangeNotifier {
       );
       Navigator.of(navigatorKey.currentContext!).pop(true);
     } catch (e) {
-      LogHelper.error("Error during enrollment: $e");
-
+      LogHelper.error("Error during enrollment finalization: $e");
       ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
-        const SnackBar(
-            content: Text('Error during enrollment. Please try again.')),
+        const SnackBar(content: Text('Error saving face. Please try again.')),
       );
       Navigator.of(navigatorKey.currentContext!).pop(false);
     } finally {
