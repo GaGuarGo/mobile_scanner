@@ -225,7 +225,7 @@ class FaceMatcherController extends ChangeNotifier {
       } else {
         ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
           SnackBar(
-            content: Text('Face Matached with ${matchedFace.username}!'),
+            content: Text('Face Matached with ${matchedFace.username}! with a probability of ${matchProbalityPercentage?.toStringAsFixed(2)}%'),
             backgroundColor: Colors.green,
           ),
         );
