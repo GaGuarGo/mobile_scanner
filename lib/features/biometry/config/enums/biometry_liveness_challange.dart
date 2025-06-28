@@ -3,6 +3,7 @@ enum LivenessChallenge {
   lookStraight,
   turnRight,
   turnLeft,
-  getCloser,
+  // getCloser,
+  steady,
   done,
 }

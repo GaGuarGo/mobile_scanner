@@ -203,25 +203,23 @@ class FaceScannerController extends ChangeNotifier {
           face: face,
           updateUI: _updateUI,
           nextChallenge: () => captureEmbeddingAndProceed(() {
-            currentChallenge = LivenessChallenge.getCloser;
-            animationController.forward();
+            currentChallenge = LivenessChallenge.steady;
           }),
         );
         break;
-      case LivenessChallenge.getCloser:
-        _faceDetectionValidationService.validateGetCloser(
+
+      case LivenessChallenge.steady:
+        _faceDetectionValidationService.validateLookStraight(
           face: face,
-          cameraController: _cameraController.cameraController,
           updateUI: _updateUI,
           nextChallenge: () => captureEmbeddingAndProceed(() {
             currentChallenge = LivenessChallenge.done;
           }),
         );
         break;
+
       case LivenessChallenge.done:
         _updateUI(ValidationState.valid);
-
-        await Future.delayed(500.milliseconds);
 
         await _finalizeEnrollment();
 
@@ -232,6 +230,9 @@ class FaceScannerController extends ChangeNotifier {
   Future<void> _finalizeEnrollment() async {
     if (savingFace) return;
     savingFace = true;
+
+    await Future.delayed(1.seconds);
+
     await _cameraController.cameraController.stopImageStream();
 
     LogHelper.info(
