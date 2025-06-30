@@ -55,6 +55,7 @@ class FaceRecognitionService {
     final image = img.decodeImage(imageBytes);
 
     if (image == null) {
+      LogHelper.error("Failed to decode image from XFile: ${imageFile.path}");
       throw Exception('Failed to decode image');
     }
 
@@ -69,17 +70,19 @@ class FaceRecognitionService {
     final preprocessedImage = _preprocessImage(faceCrop);
 
     final input = [preprocessedImage];
-
-    final output = List.filled(1 * 192, 0.0).reshape([1, 192]);
+    final output = List.filled(1 * _MODEL_OUTPUT_SIZE, 0.0)
+        .reshape([1, _MODEL_OUTPUT_SIZE]);
 
     _interpreter.run(input, output);
 
-    return List<double>.from(output[0]);
+    final List<double> rawEmbedding = List<double>.from(output[0]);
+
+    return _l2Normalize(rawEmbedding);
   }
 
   Future<List<double>> getEmbeddingFromStream(
       CameraImage image, Face face) async {
-    img.Image? rgbImage = await convertCameraImageToRgb(image);
+    img.Image? rgbImage = await _convertCameraImageToRgb(image);
 
     if (rgbImage == null) return [];
     img.Image croppedFace = img.copyCrop(
@@ -128,7 +131,7 @@ class FaceRecognitionService {
     return _l2Normalize(embedding);
   }
 
-  Future<img.Image?> convertCameraImageToRgb(CameraImage image) async {
+  Future<img.Image?> _convertCameraImageToRgb(CameraImage image) async {
     if (kDebugMode) {
       LogHelper.warning('Camera image format: ${image.format.group}');
       LogHelper.warning('Camera image planes: ${image.planes.length}');
@@ -175,11 +178,14 @@ class FaceRecognitionService {
         final int vValue = yuvBytes[uvIndex];
         final int uValue = yuvBytes[uvIndex + 1];
 
-        final r = (yValue + 1.402 * (vValue - 128)).toInt();
-        final g =
-            (yValue - 0.344136 * (uValue - 128) - 0.714136 * (vValue - 128))
-                .toInt();
-        final b = (yValue + 1.772 * (uValue - 128)).toInt();
+        int r = (yValue + 1.402 * (vValue - 128)).toInt();
+        int g = (yValue - 0.344136 * (uValue - 128) - 0.714136 * (vValue - 128))
+            .toInt();
+        int b = (yValue + 1.772 * (uValue - 128)).toInt();
+
+        r = r.clamp(0, 255);
+        g = g.clamp(0, 255);
+        b = b.clamp(0, 255);
 
         image.setPixelRgb(x, y, r, g, b);
       }
